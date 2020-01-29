@@ -196,14 +196,9 @@
             return Object.keys(keys).filter(shouldShowBuild).map(key => {
                 let a_idx = keys[key].a_idx;
                 let b_idx = keys[key].b_idx;
-                let datum_a = null;
-                let datum_b = null;
-                if (a_idx != undefined) {
-                    datum_a = a_data[a_idx][2];
-                }
-                if (b_idx != undefined) {
-                    datum_b = b_data[b_idx][2];
-                }
+                let datum_a = a_idx === undefined ? null : a_data[a_idx][2];
+                let datum_b = b_idx === undefined ? null : b_data[b_idx][2];
+
                 return {
                     casename: key,
                     datum_a,
