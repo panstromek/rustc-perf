@@ -173,15 +173,6 @@
         let fields = test_names.map(name => ({name, fields: to_fields(name)}));
 
         function to_fields(name) {
-            let source = data.a.data[name] || data.b.data[name];
-            let max_length = 0;
-            if (data.a.data[name]) {
-                max_length = data.a.data[name].length;
-            }
-            if (data.b.data[name] && data.b.data[name].length > max_length) {
-                max_length = data.b.data[name].length;
-            }
-
             let keys = {};
             if (data.a.data[name]) {
                 for (let i = 0; i < data.a.data[name].length; i++) {
