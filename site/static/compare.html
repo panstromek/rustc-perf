@@ -198,15 +198,11 @@
                 let b_idx = keys[key].b_idx;
                 let datum_a = null;
                 let datum_b = null;
-                if (a_idx != undefined && b_idx != undefined) {
+                if (a_idx != undefined) {
                     datum_a = a_data[a_idx][2];
+                }
+                if (b_idx != undefined) {
                     datum_b = b_data[b_idx][2];
-                } else if (a_idx != undefined) {
-                    datum_a = a_data[a_idx][2];
-                } else if (b_idx != undefined) {
-                    datum_b = b_data[b_idx][2];
-                } else {
-                    // should be unreachable
                 }
                 return {
                     casename: key,
