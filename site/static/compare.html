@@ -174,21 +174,23 @@
 
         function to_fields(name) {
             let keys = {};
-            if (data.a.data[name]) {
-                for (let i = 0; i < data.a.data[name].length; i++) {
-                    if (!keys[data.a.data[name][i][0]]) {
-                        keys[data.a.data[name][i][0]] = {};
+            let a_data = data.a.data[name]
+            if (a_data) {
+                a_data.forEach((item, i) => {
+                    if (!keys[item[0]]) {
+                        keys[item[0]] = {};
                     }
-                    keys[data.a.data[name][i][0]].a_idx = i;
-                }
+                    keys[item[0]].a_idx = i;
+                })
             }
-            if (data.b.data[name]) {
-                for (let i = 0; i < data.b.data[name].length; i++) {
-                    if (!keys[data.b.data[name][i][0]]) {
-                        keys[data.b.data[name][i][0]] = {};
+            let b_data = data.b.data[name]
+            if (b_data) {
+                b_data.forEach((item, i) => {
+                    if (!keys[item[0]]) {
+                        keys[item[0]] = {};
                     }
-                    keys[data.b.data[name][i][0]].b_idx = i;
-                }
+                    keys[item[0]].b_idx = i;
+                })
             }
 
             let fields = [];
@@ -198,12 +200,12 @@
                 let datum_a = null;
                 let datum_b = null;
                 if (a_idx != undefined && b_idx != undefined) {
-                    datum_a = data.a.data[name][a_idx][2];
-                    datum_b = data.b.data[name][b_idx][2];
+                    datum_a = a_data[a_idx][2];
+                    datum_b = b_data[b_idx][2];
                 } else if (a_idx != undefined) {
-                    datum_a = data.a.data[name][a_idx][2];
+                    datum_a = a_data[a_idx][2];
                 } else if (b_idx != undefined) {
-                    datum_b = data.b.data[name][b_idx][2];
+                    datum_b = b_data[b_idx][2];
                 } else {
                     // should be unreachable
                 }
