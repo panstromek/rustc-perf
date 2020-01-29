@@ -193,8 +193,7 @@
                 })
             }
 
-            let fields = [];
-            for (let key in keys) {
+            return Object.keys(keys).filter(shouldShowBuild).map(key => {
                 let a_idx = keys[key].a_idx;
                 let b_idx = keys[key].b_idx;
                 let datum_a = null;
@@ -209,17 +208,13 @@
                 } else {
                     // should be unreachable
                 }
-                if (shouldShowBuild(key)) {
-                    fields.push({
-                        casename: key,
-                        datum_a,
-                        datum_b,
-                        percent: percent_chg(datum_a, datum_b),
-                    });
-                }
-            }
-
-            return fields;
+                return {
+                    casename: key,
+                    datum_a,
+                    datum_b,
+                    percent: percent_chg(datum_a, datum_b),
+                };
+            })
         }
 
         for (let field of fields) {
