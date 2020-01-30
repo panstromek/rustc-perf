@@ -112,24 +112,7 @@
     }
 
     function populate_data(data) {
-        {
-            let filter = document.querySelector("#filter").value;
-            let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
-            let is_copied = false;
-            for (let name of test_names) {
-                if (!name.includes(filter)) {
-                    if (!is_copied) {
-                        // Copying data is very expensive
-                        // This branch ensures that we avoid copying
-                        // if there are no filters (which is the most common case)
-                        data = JSON.parse(JSON.stringify(DATA)); // deep copy
-                        is_copied = true;
-                    }
-                    delete data.a.data[name];
-                    delete data.b.data[name];
-                }
-            }
-        }
+        let filter = document.querySelector("#filter").value;
 
         function shouldShowBuild(name) {
             if (name == "clean") {
@@ -168,9 +151,9 @@
         html += "</tr>";
         html += "</thead>";
 
-        let test_names = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)]);
-
-        let fields = test_names.map(name => ({name, fields: to_fields(name)}));
+        const fields = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)])
+            .filter(name => name.includes(filter))
+            .map(name => ({name, fields: to_fields(name)}));
 
         function to_fields(name) {
             let keys = {};
