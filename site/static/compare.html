@@ -113,16 +113,20 @@
 
     function populate_data(data) {
         let filter = document.querySelector("#filter").value;
+        const show_clean = document.querySelector("#build-clean").checked;
+        const show_baseline_incr = document.querySelector("#build-baseline-incr").checked;
+        const show_clean_incr = document.querySelector("#build-clean-incr").checked;
+        const show_patch_incr = document.querySelector("#build-patch-incr").checked;
 
         function shouldShowBuild(name) {
-            if (name == "clean") {
-                return document.querySelector("#build-clean").checked;
-            } else if (name == "baseline incremental") {
-                return document.querySelector("#build-baseline-incr").checked;
-            } else if (name == "clean incremental") {
-                return document.querySelector("#build-clean-incr").checked;
+            if (name === "clean") {
+                return show_clean;
+            } else if (name === "baseline incremental") {
+                return show_baseline_incr;
+            } else if (name === "clean incremental") {
+                return show_clean_incr;
             } else if (name.startsWith("patched incremental")) {
-                return document.querySelector("#build-patch-incr").checked;
+                return show_patch_incr;
             } else {
                 // Unknown, but by default we should show things
                 return true;
