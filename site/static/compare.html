@@ -322,7 +322,7 @@
         populate_data(DATA);
     }
 
-    document.querySelector("#filter").addEventListener("change", rerender);
+    document.querySelector("#filter").addEventListener("input", rerender);
     document.querySelector("#build-clean").addEventListener("change", rerender);
     document.querySelector("#build-baseline-incr").addEventListener("change", rerender);
     document.querySelector("#build-clean-incr").addEventListener("change", rerender);
