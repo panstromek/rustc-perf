@@ -129,28 +129,6 @@
             }
         }
 
-        let html = `<table class="compare" style="font-size: medium !important;">`;
-
-        // Heading: the two dates, and the time and rss percent changes.
-        html += "<thead>";
-        html += "<tr>";
-
-        html += "<th>" + "<a href=\"" +
-            "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
-            data.b.commit +
-            "\">compare</a>" + "</th>";
-
-        html += "<th>" + print_date(new Date(data.a.date))
-            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
-                >${data.a.commit.substring(0,8)}</a>)` + "</th>";
-        html += "<th>" + print_date(new Date(data.b.date))
-            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
-                >${data.b.commit.substring(0,8)}</a>)` + "</th>";
-
-        html += "<th>" + "% change" + "</th>";
-        html += "</tr>";
-        html += "</thead>";
-
         const fields = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)])
             .filter(name => name.includes(filter))
             .map(name => ({name, fields: to_fields(name)}));
@@ -236,6 +214,28 @@
             }
             return "";
         }
+
+        let html = `<table class="compare" style="font-size: medium !important;">`;
+
+        // Heading: the two dates, and the time and rss percent changes.
+        html += "<thead>";
+        html += "<tr>";
+
+        html += "<th>" + "<a href=\"" +
+            "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
+            data.b.commit +
+            "\">compare</a>" + "</th>";
+
+        html += "<th>" + print_date(new Date(data.a.date))
+            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
+                >${data.a.commit.substring(0,8)}</a>)` + "</th>";
+        html += "<th>" + print_date(new Date(data.b.date))
+            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
+                >${data.b.commit.substring(0,8)}</a>)` + "</th>";
+
+        html += "<th>" + "% change" + "</th>";
+        html += "</tr>";
+        html += "</thead>";
 
         for (let field of fields) {
             let dodgy = dodgy_name_title(field.name);
