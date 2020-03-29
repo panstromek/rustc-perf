@@ -3,6 +3,56 @@
 <head>
 <meta charset="utf-8">
 <title>rustc performance data</title>
+<script>
+    let DATA;
+    let dataPromise;
+    {
+        const params = new URLSearchParams(window.location.search.slice(1));
+        const state = {};
+        for (let param of params) {
+            let key = param[0];
+            let value = param[1];
+            if (key === "absolute") {
+                value = value === "true";
+            }
+            state[key] = value;
+        }
+        let url = "perfdata"; // FIXME put back to perf rlo
+        dataPromise = fetch(url, {
+            method: "GET" /* "POST" */,
+            // FIXME use POST request with this body for perf.rlo
+            // body: JSON.stringify(Object.assign({
+            //     start: "",
+            //     end: "",
+            //     stat: "instructions:u",
+            // }, state)),
+            mode: "cors"
+        });
+    }
+</script>
+
+<script crossorigin src="https://unpkg.com/@msgpack/msgpack"></script>
+<script>
+
+    dataPromise = dataPromise.then(response => {
+        if (response.ok) {
+            if (MessagePack === undefined) {
+                alert("msgpack is not loaded");
+                return Promise.reject("msgpack is not loaded");
+            }
+            return MessagePack
+                .decodeAsync(response.clone().body)
+                .catch(() => response.text().then(data => alert(data)));
+        } else {
+            return response.text().then(data => {
+                alert(data);
+                return Promise.reject(data);
+            });
+        }
+    }, err => {
+        console.log("error fetching ", "/get", ": ", err);
+    })
+</script>
 <link rel="stylesheet" type="text/css" href="perf.css">
 </head>
 <body class="container">
@@ -55,9 +105,14 @@
     <a href="https://github.com/rust-lang-nursery/rustc-perf">
         <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
     </a>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
     <script src="shared.js"></script>
     <script>
+    load_state(Boolean)
+    dataPromise.then(function (data) {
+        DATA = data;
+        populate_data(data);
+    });
+
     function print_date(date) {
         function pad_str(i) {
             return (i < 10) ? "0" + i : "" + i;
@@ -66,38 +121,14 @@
         return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())}`;
     }
 
-    function unique(arr) {
-        return arr.filter((value, idx) => arr.indexOf(value) == idx);
-    }
-
-    function add_datum_fields(datum, sha, bench, run) {
-        let html = "";
-        if (datum) {
-            html += "<td>";
-            let txt = datum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            html += `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${txt}</a>`;
-            html += "</td>";
-        } else {
-            html += "<td>-</td>";
-        }
-        return html;
-    }
-
-    function percent_chg(a, b) {
-        if (a && b) {
-            return 100 * (b - a) / a;
-        } else {
-            return null;
-        }
-    }
 
     function add_percent(pct, dodgy, dodgy_marker) {
-        if (pct && pct != Infinity && pct != -Infinity) {
+        if (pct && pct !== Infinity && pct !== -Infinity) {
             let klass = "";
             if (pct > 1) {
-                klass = 'span class="positive"';
+                klass = 'class="positive"';
             } else if (pct < -1) {
-                klass = 'span class="negative"';
+                klass = 'class="negative"';
             }
             let title = "";
             let marker = "";
@@ -105,14 +136,18 @@
                 title = `title="${dodgy}"`;
                 marker = dodgy_marker;
             }
-            return `<span ${klass} ${title}>${pct.toFixed(1)}%${marker}</span>`;
+            const rounded = Math.round(pct * 10);
+            const split = (`${rounded}`).split('');
+            split[split.length - 1] = ((split.length - (rounded < 0 ? 2 : 1) === 0) ? '0.' : '.') + `${split[split.length - 1]}`;
+            const fixed = split.join('');
+            return `<span ${klass} ${title}>${fixed}%${marker}</span>`;
         } else {
-            return "<span>-</span>"
+            return "-"
         }
     }
 
     function populate_data(data) {
-        let filter = document.getElementById("filter").value;
+        const filter = document.getElementById("filter").value;
         const show_clean = document.getElementById("build-clean").checked;
         const show_baseline_incr = document.getElementById("build-baseline-incr").checked;
         const show_clean_incr = document.getElementById("build-clean-incr").checked;
@@ -133,63 +168,58 @@
             }
         }
 
-        const fields = unique([...Object.keys(data.a.data), ...Object.keys(data.b.data)])
-            .filter(name => name.includes(filter))
-            .map(name => ({name, fields: to_fields(name)}));
+        const fields = [...Object.keys(data.a.data), ...Object.keys(data.b.data)]
+            .filter((name, idx, arr) => name.includes(filter) && arr.indexOf(name) === idx)
+            .map(name => {
+                const keys = {};
+                const a_data = data.a.data[name];
+                if (a_data) {
+                    a_data.forEach((item, i) => {
+                        if (!keys[item[0]]) {
+                            keys[item[0]] = {};
+                        }
+                        keys[item[0]].a_idx = i;
+                    });
+                }
+                const b_data = data.b.data[name];
+                if (b_data) {
+                    b_data.forEach((item, i) => {
+                        if (!keys[item[0]]) {
+                            keys[item[0]] = {};
+                        }
+                        keys[item[0]].b_idx = i;
+                    });
+                }
 
-        function to_fields(name) {
-            let keys = {};
-            let a_data = data.a.data[name]
-            if (a_data) {
-                a_data.forEach((item, i) => {
-                    if (!keys[item[0]]) {
-                        keys[item[0]] = {};
-                    }
-                    keys[item[0]].a_idx = i;
-                })
-            }
-            let b_data = data.b.data[name]
-            if (b_data) {
-                b_data.forEach((item, i) => {
-                    if (!keys[item[0]]) {
-                        keys[item[0]] = {};
-                    }
-                    keys[item[0]].b_idx = i;
-                })
-            }
+                const fields = Object.keys(keys).filter(shouldShowBuild).map(key => {
+                    const a_idx = keys[key].a_idx;
+                    const b_idx = keys[key].b_idx;
+                    const datum_a = a_idx === undefined ? null : a_data[a_idx][2];
+                    const datum_b = b_idx === undefined ? null : b_data[b_idx][2];
 
-            return Object.keys(keys).filter(shouldShowBuild).map(key => {
-                let a_idx = keys[key].a_idx;
-                let b_idx = keys[key].b_idx;
-                let datum_a = a_idx === undefined ? null : a_data[a_idx][2];
-                let datum_b = b_idx === undefined ? null : b_data[b_idx][2];
+                    return {
+                        casename: key,
+                        datum_a,
+                        datum_b,
+                        percent: datum_a && datum_b ? 100 * (datum_b - datum_a) / datum_a : null,
+                    };
+                });
+                const pcts = fields.map(field => field.percent).filter(p => p !== undefined && p !== null);
+                const sum = pcts.reduce((a, b) => a + b, 0);
+                const avg = sum / (pcts.length || 1);
 
                 return {
-                    casename: key,
-                    datum_a,
-                    datum_b,
-                    percent: percent_chg(datum_a, datum_b),
+                    name,
+                    fields,
+                    max_pct: Math.max(...pcts),
+                    min_pct: Math.min(...pcts),
+                    farthest_pct: Math.max(...pcts.map(p => Math.abs(p))),
+                    avg_pct: avg,
+                    max_casename_len: Math.max(...fields.map(f => f.casename.length)),
                 };
-            })
-        }
+            }).sort((a, b) => b.farthest_pct - a.farthest_pct);
 
-        for (let field of fields) {
-            let pcts = field.fields.map(field => field.percent)
-                .filter(p => p != undefined && p != null);
-            field.max_pct = Math.max(...pcts);
-            field.min_pct = Math.min(...pcts);
-            field.farthest_pct = Math.max(...pcts.map(p => Math.abs(p)));
-            let sum = pcts.reduce((a, b) => a + b, 0);
-            let avg = sum / pcts.length;
-            field.avg_pct = avg;
-            field.max_casename_len = Math.max(...field.fields.map(f => f.casename.length));
-        }
-
-        fields.sort((a, b) => {
-            return b.farthest_pct - a.farthest_pct;
-        });
-
-        let max_name_width = Math.max(...fields.map(f => f.max_casename_len));
+        const max_name_width = Math.max(...fields.map(f => f.max_casename_len));
 
         function dodgy_name_title(name) {
             if (name.startsWith("coercions") ||
@@ -212,69 +242,87 @@
             if (name.startsWith("style-servo") && casename.startsWith("clean incremental")) {
                 variation = 20;
             }
-            if (variation != 0) {
+            if (variation !== 0) {
                 return `This measurement is known to vary by ±${variation}%. Do not trust it! ` +
                        "And see the warning at the bottom of the table."
             }
             return "";
         }
 
-        let html = `<table class="compare" style="font-size: medium !important;">`;
-
         // Heading: the two dates, and the time and rss percent changes.
-        html += "<thead>";
-        html += "<tr>";
+        let html = `<table class="compare" style="font-size: medium !important;">
+<thead>
+<tr>
+    <th>
+        <a href="https://github.com/rust-lang/rust/compare/${data.a.commit}...${data.b.commit}">compare</a>
+    </th>
+    <th>
+        ${print_date(new Date(data.a.date))}
+        (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}">${data.a.commit.substring(0, 8)}</a>)
+    </th>
+    <th>
+        ${print_date(new Date(data.b.date))}
+        (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}">${data.b.commit.substring(0, 8)}</a>)
+    </th>
+    <th>% change</th>
+</tr>
+</thead>`;
 
-        html += "<th>" + "<a href=\"" +
-            "https://github.com/rust-lang/rust/compare/" + data.a.commit + "..." +
-            data.b.commit +
-            "\">compare</a>" + "</th>";
+        function formatNumber(datum) {
+            // this is optimized version of
+            // datum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            // It's about 20-30 times faster, crazy..
+            const rounded = Math.round(datum * 100);
+            const split = ((rounded) + '').split('');
+            split[split.length - 2] = ((split.length - (rounded < 0 ? 3 : 2) === 0) ? '0.' : '.') + split[split.length - 2];
+            for (let i = split.length - 5; i > 0; i -= 3) {
+                split[i] = `,${split[i]}`;
+            }
+            return split.join('');
+        }
 
-        html += "<th>" + print_date(new Date(data.a.date))
-            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}"
-                >${data.a.commit.substring(0,8)}</a>)` + "</th>";
-        html += "<th>" + print_date(new Date(data.b.date))
-            + ` (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}"
-                >${data.b.commit.substring(0,8)}</a>)` + "</th>";
-
-        html += "<th>" + "% change" + "</th>";
-        html += "</tr>";
-        html += "</thead>";
-
-        for (let field of fields) {
-            let dodgy = dodgy_name_title(field.name);
-            html += "<tr><td>&nbsp;</td></tr>";
-            html += "<tr data-field-start=true>";
-            html += `<th style="width: ${max_name_width/2}em;" data-js-name=${field.name}>` +
-                `<details class=toggle-table><summary>` +
-                truncate_name(field.name) + "</summary></details></th>";
-            html += "<td> avg: " + add_percent(field.avg_pct, dodgy, "?") + "</td>";
-            html += "<td text-align=center> min: " + add_percent(field.min_pct, dodgy, "?") +
-                    "</td>";
-            html += "<td> max: " + add_percent(field.max_pct, dodgy, "?") + "</td>";
-            html += "</tr>";
-            for (let i = 0; i < field.fields.length; i++) {
-                let entry = field.fields[i];
-                let dodgy = dodgy_casename_title(field.name, entry.casename);
-                html += "<tr>";
-                html += "<td>" + entry.casename + "</td>";
-                // No base comparison commit for the first datum
-                html += add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename);
-                html += add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename);
-                let pct = add_percent(entry.percent, dodgy, "??");
-                let diff_href =
-                    `/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}`;
-                html += `<td><a href="${diff_href}">${pct}</a></td>`;
-                html += "</tr>";
+        function add_datum_fields(datum, sha, bench, run) {
+            if (datum) {
+                return `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${
+                    formatNumber(datum)
+                }</a>`;
+            } else {
+                return "-";
             }
         }
 
-        html += "</table>";
+        function truncate_name(name) {
+            return name.length > 30 ? name.substring(0, 30) + "..." : name;
+        }
+
+        html += fields.map(field => {
+            let dodgy = dodgy_name_title(field.name);
+            return [`<tr><td>&nbsp;</td></tr>
+<tr data-field-start=true>
+    <th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>
+        <details class=toggle-table>
+            <summary>${truncate_name(field.name)}</summary>
+        </details>
+    </th>
+    <td> avg: ${add_percent(field.avg_pct, dodgy, "?")}</td>
+    <td text-align=center> min: ${add_percent(field.min_pct, dodgy, "?")}</td>
+    <td> max: ${add_percent(field.max_pct, dodgy, "?")}</td>
+</tr>`,
+                field.fields.map(entry => `<tr>
+    <td>${entry.casename}</td>
+    <td>${add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename)}</td>
+    <td>${add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename)}</td>
+    <td>
+        <a href="/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}">
+${(add_percent(entry.percent, dodgy_casename_title(field.name, entry.casename), "??"))}
+        </a>
+    </td>
+</tr>`)];
+        }).flat(7).join('') + "</table>";
 
         document.getElementById("content").innerHTML = html;
         document.getElementById("content").style.display = "block";
         for (let element of document.querySelectorAll(".toggle-table")) {
-            let name = element.parentElement.getAttribute("data-js-name");
             let in_body = [];
             let next = element.parentElement.parentElement.nextElementSibling;
             while (next && next.getAttribute("data-field-start") !== "true") {
@@ -296,18 +344,6 @@
         }
     }
 
-    var DATA;
-    function make_data(state) {
-        let values = Object.assign({}, {
-            start: "",
-            end: "",
-            stat: "instructions:u",
-        }, state);
-        make_request("/get", values).then(function(data) {
-            DATA = data;
-            populate_data(data);
-        });
-    }
 
     function submit_settings() {
         let start = document.getElementById("start-bound").value;
@@ -319,8 +355,6 @@
         params.append("stat", stat);
         window.location.search = params.toString();
     }
-
-    load_state(make_data);
 
     function rerender() {
         populate_data(DATA);
