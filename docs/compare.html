@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>rustc performance data</title>
+<script>
+    let DATA;
+    let dataPromise;
+    {
+        const params = new URLSearchParams(window.location.search.slice(1));
+        const state = {};
+        for (let param of params) {
+            let key = param[0];
+            let value = param[1];
+            if (key === "absolute") {
+                value = value === "true";
+            }
+            state[key] = value;
+        }
+        let url = "perfdata"; // FIXME put back to perf rlo
+        dataPromise = fetch(url, {
+            method: "GET" /* "POST" */,
+            // FIXME use POST request with this body for perf.rlo
+            // body: JSON.stringify(Object.assign({
+            //     start: "",
+            //     end: "",
+            //     stat: "instructions:u",
+            // }, state)),
+            mode: "cors"
+        });
+    }
+</script>
+
+<script crossorigin src="https://unpkg.com/@msgpack/msgpack"></script>
+<script>
+
+    dataPromise = dataPromise.then(response => {
+        if (response.ok) {
+            if (MessagePack === undefined) {
+                alert("msgpack is not loaded");
+                return Promise.reject("msgpack is not loaded");
+            }
+            return MessagePack
+                .decodeAsync(response.clone().body)
+                .catch(() => response.text().then(data => alert(data)));
+        } else {
+            return response.text().then(data => {
+                alert(data);
+                return Promise.reject(data);
+            });
+        }
+    }, err => {
+        console.log("error fetching ", "/get", ": ", err);
+    })
+</script>
+<link rel="stylesheet" type="text/css" href="perf.css">
+</head>
+<body class="container">
+    <div>&gt; <a href="index.html">graphs</a>, <a href="compare.html">compare</a>,
+        <a href="dashboard.html">dashboard</a>, <a href="status.html">status</a>.</div>
+    <div style=''>
+        <p>Warning: although measurements known to have high variation are marked with
+            '?'/'??', this does not mean that unmarked measurements are guaranteed to have
+            low variation. Verify the measurement against the
+            <a href="compare.html?start=9a90d03ad171856dc016c2dcc19292ec49a8a26f&end=fd7f48b3eff67726d848c059574b6aa86675110b">
+            last "noise run"</a> which shows the perf difference of a non-functional change.
+        </p>
+    </div>
+    Filter benchmark builds: <input id="filter" type="text" /><br>
+    Include runs:
+    <div>
+        <div><input type="checkbox" id="build-clean" checked />Clean</div>
+        <div><input type="checkbox" id="build-baseline-incr" checked />Baseline incremental</div>
+        <div><input type="checkbox" id="build-clean-incr" checked />Clean incremental</div>
+        <div><input type="checkbox" id="build-patch-incr" checked />Patched incremental</div>
+    </div>
+    <p>See brief explanation at bottom of this page for details on what each run kind means.</p>
+    <div id="content" style="display: none"></div>
+    <div id="settings">
+        <div id="commits" class="settings" style="text-align:left;">
+            <h3>Commits</h3>
+            Commit/Date A: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="start-bound" /><br>
+            Commit/Date B: <input width="100em" placeholder="YYYY-MM-DD or SHA" id="end-bound" /><br>
+            <select id='stats' name="stat">
+            </select>
+            <div class="submit">
+                <a href="#" onClick="submit_settings(); return false;">Submit</a>
+            </div>
+        </div>
+    </div>
+    <div id="as-of"></div>
+    <div>
+        <h3>Brief explanation</h3>
+        <p>Most benchmarks have at least 4 "runs"</p>
+        <ul>
+            <li>Clean: a non-incremental build</li>
+            <li>Baseline incremental: an incremental build starting with empty cache</li>
+            <li>Clean incremental: an incremental build starting with complete cache, and clean
+                source directory -- the "perfect" scenario for incremental.</li>
+            <li>Patched incremental: an incremental build starting with complete cache, and an
+                altered source directory. The typical variant of this is "println" which represents
+                the addition of a `println!` macro somewhere in the source code.</li>
+        </ul>
+    </div>
+    <a href="https://github.com/rust-lang-nursery/rustc-perf">
+        <img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png">
+    </a>
+    <script src="shared.js"></script>
+    <script>
+    load_state(Boolean)
+    dataPromise.then(function (data) {
+        DATA = data;
+        populate_data(data);
+    });
+
+    function print_date(date) {
+        function pad_str(i) {
+            return (i < 10) ? "0" + i : "" + i;
+        }
+
+        return `${date.getUTCFullYear()}-${pad_str(date.getUTCMonth() + 1)}-${pad_str(date.getUTCDate())}`;
+    }
+
+
+    function add_percent(pct, dodgy, dodgy_marker) {
+        if (pct && pct !== Infinity && pct !== -Infinity) {
+            let klass = "";
+            if (pct > 1) {
+                klass = 'class="positive"';
+            } else if (pct < -1) {
+                klass = 'class="negative"';
+            }
+            let title = "";
+            let marker = "";
+            if (dodgy) {
+                title = `title="${dodgy}"`;
+                marker = dodgy_marker;
+            }
+            const rounded = Math.round(pct * 10);
+            const split = (`${rounded}`).split('');
+            split[split.length - 1] = ((split.length - (rounded < 0 ? 2 : 1) === 0) ? '0.' : '.') + `${split[split.length - 1]}`;
+            const fixed = split.join('');
+            return `<span ${klass} ${title}>${fixed}%${marker}</span>`;
+        } else {
+            return "-"
+        }
+    }
+
+    function populate_data(data) {
+        const filter = document.getElementById("filter").value;
+        const show_clean = document.getElementById("build-clean").checked;
+        const show_baseline_incr = document.getElementById("build-baseline-incr").checked;
+        const show_clean_incr = document.getElementById("build-clean-incr").checked;
+        const show_patch_incr = document.getElementById("build-patch-incr").checked;
+
+        function shouldShowBuild(name) {
+            if (name === "clean") {
+                return show_clean;
+            } else if (name === "baseline incremental") {
+                return show_baseline_incr;
+            } else if (name === "clean incremental") {
+                return show_clean_incr;
+            } else if (name.startsWith("patched incremental")) {
+                return show_patch_incr;
+            } else {
+                // Unknown, but by default we should show things
+                return true;
+            }
+        }
+
+        const fields = [...Object.keys(data.a.data), ...Object.keys(data.b.data)]
+            .filter((name, idx, arr) => name.includes(filter) && arr.indexOf(name) === idx)
+            .map(name => {
+                const keys = {};
+                const a_data = data.a.data[name];
+                if (a_data) {
+                    a_data.forEach((item, i) => {
+                        if (!keys[item[0]]) {
+                            keys[item[0]] = {};
+                        }
+                        keys[item[0]].a_idx = i;
+                    });
+                }
+                const b_data = data.b.data[name];
+                if (b_data) {
+                    b_data.forEach((item, i) => {
+                        if (!keys[item[0]]) {
+                            keys[item[0]] = {};
+                        }
+                        keys[item[0]].b_idx = i;
+                    });
+                }
+
+                const fields = Object.keys(keys).filter(shouldShowBuild).map(key => {
+                    const a_idx = keys[key].a_idx;
+                    const b_idx = keys[key].b_idx;
+                    const datum_a = a_idx === undefined ? null : a_data[a_idx][2];
+                    const datum_b = b_idx === undefined ? null : b_data[b_idx][2];
+
+                    return {
+                        casename: key,
+                        datum_a,
+                        datum_b,
+                        percent: datum_a && datum_b ? 100 * (datum_b - datum_a) / datum_a : null,
+                    };
+                });
+                const pcts = fields.map(field => field.percent).filter(p => p !== undefined && p !== null);
+                const sum = pcts.reduce((a, b) => a + b, 0);
+                const avg = sum / (pcts.length || 1);
+
+                return {
+                    name,
+                    fields,
+                    max_pct: Math.max(...pcts),
+                    min_pct: Math.min(...pcts),
+                    farthest_pct: Math.max(...pcts.map(p => Math.abs(p))),
+                    avg_pct: avg,
+                    max_casename_len: Math.max(...fields.map(f => f.casename.length)),
+                };
+            }).sort((a, b) => b.farthest_pct - a.farthest_pct);
+
+        const max_name_width = Math.max(...fields.map(f => f.max_casename_len));
+
+        function dodgy_name_title(name) {
+            if (name.startsWith("coercions") ||
+                name.startsWith("ctfe-") ||     // all of them
+                name.startsWith("inflate-opt") ||
+                name.startsWith("syn-opt")
+            ) {
+                return "One or more of this benchmark's runs have high measurement variation. " +
+                       "Treat this value with caution. And see the warning at the bottom of " +
+                       "the table.";
+            }
+            return "";
+        }
+
+        function dodgy_casename_title(name, casename) {
+            let variation = 0;
+            if (name.startsWith("coercions") && casename.startsWith("patched incremental")) {
+                variation = 4;
+            }
+            if (name.startsWith("style-servo") && casename.startsWith("clean incremental")) {
+                variation = 20;
+            }
+            if (variation !== 0) {
+                return `This measurement is known to vary by ±${variation}%. Do not trust it! ` +
+                       "And see the warning at the bottom of the table."
+            }
+            return "";
+        }
+
+        // Heading: the two dates, and the time and rss percent changes.
+        let html = `<table class="compare" style="font-size: medium !important;">
+<thead>
+<tr>
+    <th>
+        <a href="https://github.com/rust-lang/rust/compare/${data.a.commit}...${data.b.commit}">compare</a>
+    </th>
+    <th>
+        ${print_date(new Date(data.a.date))}
+        (<a href="https://github.com/rust-lang/rust/commit/${data.a.commit}">${data.a.commit.substring(0, 8)}</a>)
+    </th>
+    <th>
+        ${print_date(new Date(data.b.date))}
+        (<a href="https://github.com/rust-lang/rust/commit/${data.b.commit}">${data.b.commit.substring(0, 8)}</a>)
+    </th>
+    <th>% change</th>
+</tr>
+</thead>`;
+
+        function formatNumber(datum) {
+            // this is optimized version of
+            // datum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            // It's about 20-30 times faster, crazy..
+            const rounded = Math.round(datum * 100);
+            const split = ((rounded) + '').split('');
+            split[split.length - 2] = ((split.length - (rounded < 0 ? 3 : 2) === 0) ? '0.' : '.') + split[split.length - 2];
+            for (let i = split.length - 5; i > 0; i -= 3) {
+                split[i] = `,${split[i]}`;
+            }
+            return split.join('');
+        }
+
+        function add_datum_fields(datum, sha, bench, run) {
+            if (datum) {
+                return `<a href="/detailed-query.html?commit=${sha}&benchmark=${bench}&run_name=${run}">${
+                    formatNumber(datum)
+                }</a>`;
+            } else {
+                return "-";
+            }
+        }
+
+        function truncate_name(name) {
+            return name.length > 30 ? name.substring(0, 30) + "..." : name;
+        }
+
+        html += fields.map(field => {
+            let dodgy = dodgy_name_title(field.name);
+            return [`<tr><td>&nbsp;</td></tr>
+<tr data-field-start=true>
+    <th style="width: ${max_name_width / 2}em;" data-js-name=${field.name}>
+        <details class=toggle-table>
+            <summary>${truncate_name(field.name)}</summary>
+        </details>
+    </th>
+    <td> avg: ${add_percent(field.avg_pct, dodgy, "?")}</td>
+    <td text-align=center> min: ${add_percent(field.min_pct, dodgy, "?")}</td>
+    <td> max: ${add_percent(field.max_pct, dodgy, "?")}</td>
+</tr>`,
+                field.fields.map(entry => `<tr>
+    <td>${entry.casename}</td>
+    <td>${add_datum_fields(entry.datum_a, data.a.commit, field.name, entry.casename)}</td>
+    <td>${add_datum_fields(entry.datum_b, data.b.commit, field.name, entry.casename)}</td>
+    <td>
+        <a href="/detailed-query.html?commit=${data.b.commit}&base_commit=${data.a.commit}&benchmark=${field.name}&run_name=${entry.casename}">
+${(add_percent(entry.percent, dodgy_casename_title(field.name, entry.casename), "??"))}
+        </a>
+    </td>
+</tr>`)];
+        }).flat(7).join('') + "</table>";
+
+        document.getElementById("content").innerHTML = html;
+        document.getElementById("content").style.display = "block";
+        for (let element of document.querySelectorAll(".toggle-table")) {
+            let in_body = [];
+            let next = element.parentElement.parentElement.nextElementSibling;
+            while (next && next.getAttribute("data-field-start") !== "true") {
+                in_body.push(next);
+                next = next.nextElementSibling;
+            }
+            for (let detail of in_body) {
+                detail.style.display = "none";
+            }
+            element.addEventListener("toggle", evt => {
+                for (let detail of in_body) {
+                    if (element.open) {
+                        detail.style.display = "";
+                    } else {
+                        detail.style.display = "none";
+                    }
+                }
+            });
+        }
+    }
+
+
+    function submit_settings() {
+        let start = document.getElementById("start-bound").value;
+        let end = document.getElementById("end-bound").value;
+        let stat = getSelected("stats");
+        let params = new URLSearchParams();
+        params.append("start", start);
+        params.append("end", end);
+        params.append("stat", stat);
+        window.location.search = params.toString();
+    }
+
+    function rerender() {
+        populate_data(DATA);
+    }
+
+    document.getElementById("filter").addEventListener("input", rerender);
+    document.getElementById("build-clean").addEventListener("change", rerender);
+    document.getElementById("build-baseline-incr").addEventListener("change", rerender);
+    document.getElementById("build-clean-incr").addEventListener("change", rerender);
+    document.getElementById("build-patch-incr").addEventListener("change", rerender);
+
+    </script>
+</body>
+</html>
